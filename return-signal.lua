@@ -860,7 +860,39 @@ end
 -------------------------------
 
 function draw_vela_log()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local vela = tx.vela
+
   cls(C_BG)
+
+  -- Header (y 0-9)
+  rect(0, 0, SW, 10, C_BG2)
+  print("VELA // INTERNAL LOG // " .. tx.id, 4, 2, C_HFNT)
+
+  -- Top divider
+  draw_divider(10)
+
+  -- Log text area (y 11-118)
+  for i = 1, G.vl_line do
+    if i <= #vela then
+      local ln = vela[i]
+      if #ln > 0 then
+        print(ln, 8, 14 + (i - 1) * 12, C_WHITE)
+      end
+    end
+  end
+
+  -- Bottom divider
+  draw_divider(119)
+
+  -- Footer (y 120-135)
+  rect(0, 120, SW, 16, C_BG2)
+
+  if G.vl_done then
+    local prompt = "Z: CONTINUE"
+    local pw = #prompt * 6
+    print(prompt, SW - pw - 4, 126, C_DIM)
+  end
 end
 
 -------------------------------
@@ -1220,6 +1252,40 @@ end
 -------------------------------
 
 function update_vela_log()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local vela = tx.vela
+
+  -- Done: Z to dismiss and return to hub
+  if G.vl_done then
+    if btnp(4) then
+      G.decoded[G.tx_idx] = true
+      G.state = "hub"
+    end
+    return
+  end
+
+  -- Increment timer
+  G.vl_timer = G.vl_timer + 1
+
+  -- First line reveals immediately
+  if G.vl_line == 0 then
+    G.vl_line = 1
+    G.vl_timer = 0
+    return
+  end
+
+  -- Reveal next line on Z press or timer
+  if G.vl_line < #vela then
+    if btnp(4) or G.vl_timer >= VL_LINE_DUR then
+      G.vl_line = G.vl_line + 1
+      G.vl_timer = 0
+    end
+  end
+
+  -- Check if all lines revealed
+  if G.vl_line >= #vela then
+    G.vl_done = true
+  end
 end
 
 -------------------------------
