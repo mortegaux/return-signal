@@ -738,6 +738,133 @@ end
 -------------------------------
 
 function update_stage1()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local n = #tx.frags
+  local num_gaps = #tx.gap_pos
+
+  -- Tick timers
+  if G.s1_shake_t > 0 then
+    G.s1_shake_t = G.s1_shake_t - 1
+  end
+
+  if G.s1_flash_t > 0 then
+    G.s1_flash_t = G.s1_flash_t - 1
+    if G.s1_flash_t == 0 then
+      init_stage2(G.tx_idx)
+      G.state = "stage2"
+      return
+    end
+    return  -- no input during flash
+  end
+
+  if G.s1_mode == "frags" then
+    -- Left
+    if btnp(2) then
+      G.s1_cursor = G.s1_cursor - 1
+      if G.s1_cursor < 1 then G.s1_cursor = n end
+    end
+    -- Right
+    if btnp(3) then
+      G.s1_cursor = G.s1_cursor + 1
+      if G.s1_cursor > n then G.s1_cursor = 1 end
+    end
+    -- Up: switch to gaps mode
+    if btnp(0) then
+      G.s1_mode = "gaps"
+      G.s1_gap_cur = 1
+    end
+    -- Z: pick up fragment
+    if btnp(4) then
+      local fi = G.s1_order[G.s1_cursor]
+      -- Check not already placed
+      local already_placed = false
+      for _, pfi in pairs(G.s1_placed) do
+        if pfi == fi then already_placed = true; break end
+      end
+      if not already_placed then
+        G.s1_held = fi
+        G.s1_mode = "gaps"
+        G.s1_gap_cur = 1
+        play_sfx(6)
+      end
+    end
+
+  elseif G.s1_mode == "gaps" then
+    if G.s1_held ~= nil then
+      -- Holding a fragment
+      -- Left
+      if btnp(2) then
+        G.s1_gap_cur = G.s1_gap_cur - 1
+        if G.s1_gap_cur < 1 then G.s1_gap_cur = num_gaps end
+      end
+      -- Right
+      if btnp(3) then
+        G.s1_gap_cur = G.s1_gap_cur + 1
+        if G.s1_gap_cur > num_gaps then G.s1_gap_cur = 1 end
+      end
+      -- Z: try to place
+      if btnp(4) then
+        local gi = G.s1_gap_cur
+        if not G.s1_placed[gi] then
+          local frag = tx.frags[G.s1_held]
+          if frag.gap == gi then
+            -- Correct
+            G.s1_placed[gi] = G.s1_held
+            G.s1_held = nil
+            play_sfx(1)
+            -- Check if all gaps filled
+            local all_filled = true
+            for g = 1, num_gaps do
+              if not G.s1_placed[g] then all_filled = false; break end
+            end
+            if all_filled then
+              G.s1_flash_t = FLASH_DUR
+              play_sfx(3)
+            else
+              G.s1_mode = "frags"
+            end
+          else
+            -- Wrong
+            G.s1_shake_t = SHAKE_DUR
+            G.s1_held = nil
+            G.s1_mode = "frags"
+            play_sfx(2)
+          end
+        end
+      end
+      -- X or Down: cancel
+      if btnp(5) or btnp(1) then
+        G.s1_held = nil
+        G.s1_mode = "frags"
+      end
+
+    else
+      -- Gaps mode, no held fragment
+      -- Left
+      if btnp(2) then
+        G.s1_gap_cur = G.s1_gap_cur - 1
+        if G.s1_gap_cur < 1 then G.s1_gap_cur = num_gaps end
+      end
+      -- Right
+      if btnp(3) then
+        G.s1_gap_cur = G.s1_gap_cur + 1
+        if G.s1_gap_cur > num_gaps then G.s1_gap_cur = 1 end
+      end
+      -- Z: lift from filled gap
+      if btnp(4) then
+        local gi = G.s1_gap_cur
+        if G.s1_placed[gi] then
+          G.s1_held = G.s1_placed[gi]
+          G.s1_placed[gi] = nil
+          play_sfx(6)
+        end
+      end
+      -- X or Down: back to frags
+      if btnp(5) or btnp(1) then
+        G.s1_mode = "frags"
+      end
+    end
+  end
 end
 
 -------------------------------
