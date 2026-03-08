@@ -588,6 +588,22 @@ end
 -------------------------------
 
 function update_hub()
+  -- Up
+  if btnp(0) then
+    G.hub_cur = next_selectable(G.hub_cur, -1)
+  end
+  -- Down
+  if btnp(1) then
+    G.hub_cur = next_selectable(G.hub_cur, 1)
+  end
+  -- Z: open transmission
+  if btnp(4) then
+    if is_available(G.hub_cur) and not G.decoded[G.hub_cur] then
+      G.tx_idx = G.hub_cur
+      init_stage1(G.hub_cur)
+      G.state = "stage1"
+    end
+  end
 end
 
 -------------------------------
