@@ -473,8 +473,7 @@ function draw_title()
 end
 
 -------------------------------
--- [DRAW] Hub (stub)
--------------------------------
+-- [DRAW] Hub-------------------------------
 
 function draw_hub()
   cls(C_BG)
@@ -555,8 +554,7 @@ function draw_hub()
 end
 
 -------------------------------
--- [DRAW] Stage 1 (stub)
--------------------------------
+-- [DRAW] Stage 1-------------------------------
 
 function draw_stage1()
   local tx = TRANSMISSIONS[G.tx_idx]
@@ -690,8 +688,7 @@ function draw_stage1()
 end
 
 -------------------------------
--- [DRAW] Stage 2 (stub)
--------------------------------
+-- [DRAW] Stage 2-------------------------------
 
 function draw_stage2()
   local tx = TRANSMISSIONS[G.tx_idx]
@@ -862,8 +859,7 @@ function draw_stage2()
 end
 
 -------------------------------
--- [DRAW] VELA Log (stub)
--------------------------------
+-- [DRAW] VELA Log-------------------------------
 
 function draw_vela_log()
   local tx = TRANSMISSIONS[G.tx_idx]
@@ -913,8 +909,7 @@ function update_title()
 end
 
 -------------------------------
--- [UPDATE] Hub (stub)
--------------------------------
+-- [UPDATE] Hub-------------------------------
 
 function update_hub()
   -- Up
@@ -936,8 +931,7 @@ function update_hub()
 end
 
 -------------------------------
--- [UPDATE] Stage 1 (stub)
--------------------------------
+-- [UPDATE] Stage 1-------------------------------
 
 function update_stage1()
   local tx = TRANSMISSIONS[G.tx_idx]
@@ -1070,8 +1064,7 @@ function update_stage1()
 end
 
 -------------------------------
--- [UPDATE] Stage 2 (stub)
--------------------------------
+-- [UPDATE] Stage 2-------------------------------
 
 function check_s2_solution()
   local tx = TRANSMISSIONS[G.tx_idx]
@@ -1257,8 +1250,7 @@ function update_stage2()
 end
 
 -------------------------------
--- [UPDATE] VELA Log (stub)
--------------------------------
+-- [UPDATE] VELA Log-------------------------------
 
 function update_vela_log()
   local tx = TRANSMISSIONS[G.tx_idx]
