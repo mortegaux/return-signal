@@ -320,7 +320,7 @@ function tx_status(idx)
   if G.decoded[idx] then
     return "[DECODED]", C_OK
   elseif is_available(idx) then
-    return "[READY]", C_HFNT
+    return "[AVAILABLE]", C_TXT
   else
     return "[LOCKED]", C_DIM
   end
@@ -478,6 +478,74 @@ end
 
 function draw_hub()
   cls(C_BG)
+
+  -- Header
+  draw_header("VELA // SIGNAL LOG", fmt_time(G.t))
+
+  -- Top divider
+  draw_divider(12)
+
+  -- Transmission list
+  local list_y = 13
+  for idx = 1, #TRANSMISSIONS do
+    local tx = TRANSMISSIONS[idx]
+    local ey = list_y + (idx - 1) * HUB_ENTRY_H
+    local status, scol = tx_status(idx)
+    local selectable = is_selectable(idx)
+    local is_cur = (G.hub_cur == idx and selectable)
+
+    -- Background highlight for cursor
+    if is_cur then
+      rect(0, ey, SW, HUB_ENTRY_H, C_BG2)
+    end
+
+    -- Prefix
+    local prefix = "  "
+    if is_cur then prefix = "> " end
+
+    -- Build the left text
+    local left_text
+    if G.decoded[idx] then
+      -- Decoded: show first seq frag instead of origin
+      local first_line = tx.seq[1] or ""
+      left_text = prefix .. tx.id .. "  " .. first_line
+    elseif is_available(idx) then
+      -- Available: show origin
+      left_text = prefix .. tx.id .. "  ORIGIN: " .. tx.origin
+    else
+      -- Locked: garbled blocks
+      local garble_lens = {16, 14, 18, 15, 17, 13, 19, 16}
+      local glen = garble_lens[idx] or 16
+      local garbled = string.rep("#", glen)
+      -- Insert a space break for visual variety
+      local mid = math.floor(glen / 3)
+      garbled = string.sub(garbled, 1, mid) .. " " .. string.sub(garbled, mid + 1)
+      left_text = prefix .. tx.id .. "  " .. garbled
+    end
+
+    -- Determine text color
+    local tcol
+    if is_cur then
+      tcol = C_CUR
+    elseif not selectable then
+      tcol = C_DIM
+    else
+      tcol = scol
+    end
+
+    -- Print left text
+    print(left_text, 4, ey + 3, tcol)
+
+    -- Right-align status tag
+    local tag_w = #status * 6
+    print(status, SW - tag_w - 4, ey + 3, tcol)
+  end
+
+  -- Bottom divider
+  draw_divider(123)
+
+  -- Hint bar
+  draw_hint_bar("Z: OPEN", 124)
 end
 
 -------------------------------
