@@ -545,7 +545,13 @@ function draw_hub()
   draw_divider(123)
 
   -- Hint bar
-  draw_hint_bar("Z: OPEN", 124)
+  local hub_hint = ""
+  if is_available(G.hub_cur) and not G.decoded[G.hub_cur] then
+    hub_hint = "Z: OPEN"
+  elseif G.decoded[G.hub_cur] then
+    hub_hint = "[DECODED]"
+  end
+  draw_hint_bar(hub_hint, 124)
 end
 
 -------------------------------
@@ -1204,10 +1210,13 @@ function update_stage2()
       G.s2_col = G.s2_col + 1
       if G.s2_col > ns then G.s2_col = 1 end
     end
-    -- Down: switch to pool
+    -- Down: switch to pool (only if pool has items)
     if btnp(1) then
-      G.s2_row = 1
-      G.s2_col = 1
+      local avail_pool = s2_available_pool()
+      if #avail_pool > 0 then
+        G.s2_row = 1
+        G.s2_col = 1
+      end
     end
 
     local si = G.s2_col
