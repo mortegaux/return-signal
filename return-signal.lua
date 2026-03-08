@@ -688,7 +688,171 @@ end
 -------------------------------
 
 function draw_stage2()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local ns = #tx.seq
+
   cls(C_BG)
+
+  -- Header (y 0-9)
+  draw_header("VELA // " .. tx.id .. " // SEQUENCE")
+
+  -- Top divider
+  draw_divider(10)
+
+  -----------------------------------------------
+  -- Typewriter / Done phase
+  -----------------------------------------------
+  if G.s2_phase == "typewriter" or G.s2_phase == "done" then
+    -- Black background below header
+    rect(0, 11, SW, SH - 11, C_BG)
+
+    -- Reveal text up to s2_tw_pos characters
+    local revealed = string.sub(G.s2_tw_text, 1, G.s2_tw_pos)
+
+    -- Word-wrap revealed text to ~38 chars per line
+    local lines = {}
+    local rem = revealed
+    while #rem > 0 do
+      local l1, l2 = word_wrap(rem, 38)
+      lines[#lines + 1] = l1
+      if l2 then
+        rem = l2
+      else
+        rem = ""
+      end
+    end
+
+    -- Print lines starting at y=20, 10px apart
+    for i, ln in ipairs(lines) do
+      print(ln, 4, 20 + (i - 1) * 10, C_WHITE)
+    end
+
+    -- Done phase: show continue prompt
+    if G.s2_phase == "done" then
+      local prompt = "Z: CONTINUE"
+      local pw = #prompt * 6
+      print(prompt, SW - pw - 4, SH - 10, C_HFNT)
+    end
+
+    -- Bottom divider and status bar still drawn
+    draw_divider(127)
+    rect(0, 128, SW, 8, C_BG2)
+    return
+  end
+
+  -----------------------------------------------
+  -- Normal (place) phase
+  -----------------------------------------------
+
+  -- Slot area background (y 11-67)
+  rect(0, 11, SW, 57, C_BG2)
+
+  -- Slot layout
+  local rows, per_row = slot_layout(ns)
+  local sw = math.floor(236 / per_row) - 1
+  local max_chars = math.floor(sw / 6) - 1
+
+  -- Draw slots
+  local slot_i = 1
+  for r = 0, rows - 1 do
+    -- For 5 slots: row 0 has 3, row 1 has 2
+    local cols_this_row = per_row
+    if ns == 5 and r == 1 then cols_this_row = 2 end
+
+    local total_w = cols_this_row * sw + (cols_this_row - 1) * 2
+    local start_x = math.floor((SW - total_w) / 2)
+    local box_y = 12 + r * (SLOT_H + 2)
+
+    for c = 0, cols_this_row - 1 do
+      local si = slot_i
+      local box_x = start_x + c * (sw + 2)
+
+      -- Determine border color
+      local bcol = C_BDR
+      if G.s2_row == 0 and G.s2_col == si then
+        bcol = C_CUR
+      end
+      if G.s2_err_t > 0 and G.s2_err_sl[si] then
+        bcol = C_ERR
+      end
+
+      rectb(box_x, box_y, sw, SLOT_H, bcol)
+
+      -- Slot number top-left
+      print(tostring(si), box_x + 2, box_y + 1, C_DIM)
+
+      -- Slot content
+      if G.s2_slots[si] then
+        local pe = G.s2_pool[G.s2_slots[si]]
+        local l1, l2 = word_wrap(pe.text, max_chars)
+        print(l1, box_x + 2, box_y + 5, C_TXT)
+        if l2 then
+          print(l2, box_x + 2, box_y + 14, C_TXT)
+        end
+      end
+
+      slot_i = slot_i + 1
+    end
+  end
+
+  -- Middle divider
+  draw_divider(68)
+
+  -- Fragment pool area (y 69-126) - C_BG background (already cls'd)
+
+  local avail = s2_available_pool()
+  local pw = math.floor(236 / 4) - 1
+  local pool_max_chars = math.floor(pw / 6) - 1
+
+  for i, pi in ipairs(avail) do
+    local pe = G.s2_pool[pi]
+    local row = math.floor((i - 1) / 4)
+    local col = (i - 1) % 4
+
+    local cols_this_row = math.min(4, #avail - row * 4)
+    local total_w = cols_this_row * pw + (cols_this_row - 1) * 2
+    local start_x = math.floor((SW - total_w) / 2)
+
+    local box_x = start_x + col * (pw + 2)
+    local box_y = 70 + row * (SLOT_H + 2)
+
+    -- Determine border color
+    local bcol = C_BDR
+    if G.s2_row == 1 and G.s2_col == i then
+      bcol = C_CUR
+    end
+    if G.s2_held == pi then
+      bcol = C_SEL
+    end
+
+    rectb(box_x, box_y, pw, SLOT_H, bcol)
+
+    -- Text color
+    local tcol = C_TXT
+    if G.s2_held == pi then
+      tcol = C_SEL
+    elseif pe.decoy then
+      tcol = C_DIM
+    end
+
+    local l1, l2 = word_wrap(pe.text, pool_max_chars)
+    print(l1, box_x + 2, box_y + 5, tcol)
+    if l2 then
+      print(l2, box_x + 2, box_y + 14, tcol)
+    end
+  end
+
+  -- Bottom divider
+  draw_divider(127)
+
+  -- Status bar (y 128-135)
+  local hint
+  if G.s2_row == 1 then
+    hint = "U/D: AREA  L/R: SELECT  Z: PICK"
+  else
+    hint = "U/D: AREA  L/R: SLOT  Z: PLACE  X: CLEAR"
+  end
+  draw_hint_bar(hint, 128)
 end
 
 -------------------------------
