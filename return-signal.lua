@@ -1035,7 +1035,184 @@ end
 -- [UPDATE] Stage 2 (stub)
 -------------------------------
 
+function check_s2_solution()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local ns = #tx.seq
+  local wrong = {}
+  local any_wrong = false
+
+  for si = 1, ns do
+    local pi = G.s2_slots[si]
+    local pe = G.s2_pool[pi]
+    if pe.idx ~= tx.seq_sol[si] then
+      wrong[si] = true
+      any_wrong = true
+    end
+  end
+
+  if any_wrong then
+    G.s2_err_t = ERR_FLASH
+    G.s2_err_sl = wrong
+    play_sfx(2)
+  else
+    -- Correct! Build assembled message
+    local parts = {}
+    for si = 1, ns do
+      local pe = G.s2_pool[G.s2_slots[si]]
+      parts[#parts + 1] = pe.text
+    end
+    G.s2_tw_text = table.concat(parts, " // ")
+    G.s2_tw_pos = 0
+    G.s2_tw_t = 0
+    G.s2_pause_t = 0
+    G.s2_phase = "typewriter"
+    play_sfx(4)
+  end
+end
+
 function update_stage2()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local ns = #tx.seq
+
+  -- Tick error flash timer
+  if G.s2_err_t > 0 then
+    G.s2_err_t = G.s2_err_t - 1
+    if G.s2_err_t == 0 then
+      G.s2_err_sl = {}
+    end
+  end
+
+  -----------------------------------------------
+  -- Typewriter phase
+  -----------------------------------------------
+  if G.s2_phase == "typewriter" then
+    G.s2_tw_t = G.s2_tw_t + 1
+    if G.s2_tw_t % TW_SPEED == 0 and G.s2_tw_pos < #G.s2_tw_text then
+      G.s2_tw_pos = G.s2_tw_pos + 1
+    end
+    if G.s2_tw_pos >= #G.s2_tw_text then
+      G.s2_pause_t = G.s2_pause_t + 1
+      if G.s2_pause_t >= VL_PAUSE then
+        G.s2_phase = "done"
+      end
+    end
+    return
+  end
+
+  -----------------------------------------------
+  -- Done phase
+  -----------------------------------------------
+  if G.s2_phase == "done" then
+    if btnp(4) then
+      init_vela_log(G.tx_idx)
+      G.state = "vela_log"
+    end
+    return
+  end
+
+  -----------------------------------------------
+  -- Place phase
+  -----------------------------------------------
+
+  if G.s2_row == 1 then
+    -- Pool area
+    local avail = s2_available_pool()
+    local na = #avail
+
+    if na == 0 then
+      -- All placed, switch to slots
+      G.s2_row = 0
+      G.s2_col = 1
+    else
+      -- Clamp col
+      if G.s2_col > na then G.s2_col = na end
+      if G.s2_col < 1 then G.s2_col = 1 end
+
+      -- Left
+      if btnp(2) then
+        G.s2_col = G.s2_col - 1
+        if G.s2_col < 1 then G.s2_col = na end
+      end
+      -- Right
+      if btnp(3) then
+        G.s2_col = G.s2_col + 1
+        if G.s2_col > na then G.s2_col = 1 end
+      end
+      -- Up: switch to slots
+      if btnp(0) then
+        G.s2_row = 0
+        G.s2_col = 1
+      end
+      -- Z: toggle select
+      if btnp(4) then
+        local pi = avail[G.s2_col]
+        if G.s2_held == pi then
+          G.s2_held = nil
+        else
+          G.s2_held = pi
+          play_sfx(6)
+        end
+      end
+      -- X: deselect
+      if btnp(5) then
+        G.s2_held = nil
+      end
+    end
+
+  else
+    -- Slot area (G.s2_row == 0)
+
+    -- Left
+    if btnp(2) then
+      G.s2_col = G.s2_col - 1
+      if G.s2_col < 1 then G.s2_col = ns end
+    end
+    -- Right
+    if btnp(3) then
+      G.s2_col = G.s2_col + 1
+      if G.s2_col > ns then G.s2_col = 1 end
+    end
+    -- Down: switch to pool
+    if btnp(1) then
+      G.s2_row = 1
+      G.s2_col = 1
+    end
+
+    local si = G.s2_col
+
+    -- Z pressed
+    if btnp(4) then
+      -- Check if all slots are filled and nothing held → submit
+      local all_filled = true
+      for s = 1, ns do
+        if not G.s2_slots[s] then all_filled = false; break end
+      end
+
+      if all_filled and G.s2_held == nil then
+        check_s2_solution()
+      elseif G.s2_held ~= nil and not G.s2_slots[si] then
+        -- Place held fragment into empty slot
+        G.s2_slots[si] = G.s2_held
+        G.s2_held = nil
+        play_sfx(1)
+      elseif G.s2_held == nil and G.s2_slots[si] then
+        -- Pick up from filled slot
+        G.s2_held = G.s2_slots[si]
+        G.s2_slots[si] = nil
+        play_sfx(6)
+      end
+    end
+
+    -- X pressed
+    if btnp(5) then
+      if G.s2_held then
+        G.s2_held = nil
+      elseif G.s2_slots[si] then
+        G.s2_slots[si] = nil
+        play_sfx(6)
+      end
+    end
+  end
 end
 
 -------------------------------
