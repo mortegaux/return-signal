@@ -553,7 +553,134 @@ end
 -------------------------------
 
 function draw_stage1()
+  local tx = TRANSMISSIONS[G.tx_idx]
+  local gap_ranges = compute_gap_ranges(tx)
+  local n = #tx.frags
+  local num_gaps = #tx.gap_pos
+
+  -- Shake offset
+  local sox = 0
+  if G.s1_shake_t > 0 then
+    sox = (G.s1_shake_t % 2 == 0) and 2 or -2
+  end
+
   cls(C_BG)
+
+  ---------------------------------
+  -- Header (y 0-9)
+  ---------------------------------
+  draw_header("VELA // " .. tx.id .. " // RECONSTRUCT")
+
+  ---------------------------------
+  -- Top divider (y 10)
+  ---------------------------------
+  draw_divider(10)
+
+  -- Draw known (non-gap) segments of target waveform
+  for i = 0, WAVE_W - 2 do
+    local px = WAVE_X0 + i
+    if not gap_at_x(px, gap_ranges) and not gap_at_x(px + 1, gap_ranges) then
+      local y1 = WCY + math.floor(math.sin(i * tx.target_freq) * tx.target_amp + math.sin(i * tx.target_freq * 2) * tx.target_amp * 0.4)
+      local y2 = WCY + math.floor(math.sin((i + 1) * tx.target_freq) * tx.target_amp + math.sin((i + 1) * tx.target_freq * 2) * tx.target_amp * 0.4)
+      line(px, y1, px + 1, y2, C_WHITE)
+    end
+  end
+
+  -- Draw gaps
+  for gi = 1, num_gaps do
+    local g = gap_ranges[gi]
+    if G.s1_placed[gi] then
+      -- Filled gap: draw placed fragment's wave
+      local frag = tx.frags[G.s1_placed[gi]]
+      local col = C_OK
+      if G.s1_flash_t > 0 then
+        col = (math.floor(G.s1_flash_t / 4) % 2 == 0) and C_OK or C_WHITE
+      end
+      draw_wave(g.x0 + sox, WCY, FRAG_W, frag.amp, frag.freq, col)
+    else
+      -- Empty gap: dashed centerline
+      for px = g.x0, g.x1 do
+        if px % 2 == 0 then
+          pix(px, WCY, C_DIM)
+        end
+      end
+      -- Bracket markers at gap edges
+      for by = WCY - 6, WCY + 6 do
+        pix(g.x0, by, C_BDR)
+        pix(g.x1, by, C_BDR)
+      end
+    end
+
+    -- Gap cursor highlight
+    if G.s1_mode == "gaps" and G.s1_gap_cur == gi then
+      rectb(g.x0 - 1, WCY - 14, FRAG_W + 2, 28, C_CUR)
+    end
+  end
+
+  ---------------------------------
+  -- Divider (y 80)
+  ---------------------------------
+  draw_divider(80)
+
+  ---------------------------------
+  -- Fragment row (y 81-120)
+  ---------------------------------
+  rect(0, 81, SW, 40, C_BG2)
+
+  local bw = frag_box_w(n)
+  local frag_y = 81 + math.floor((40 - FRAG_H) / 2)
+
+  for di = 1, n do
+    local fi = G.s1_order[di]
+    local frag = tx.frags[fi]
+    local bx = 4 + (di - 1) * (bw + FRAG_GAP)
+
+    -- Check if this fragment is placed or held
+    local is_placed = false
+    for _, pfi in pairs(G.s1_placed) do
+      if pfi == fi then is_placed = true; break end
+    end
+    local is_held = (G.s1_held == fi)
+
+    if is_placed or is_held then
+      -- Dim empty box
+      rectb(bx, frag_y, bw, FRAG_H, C_DIM)
+    else
+      -- Determine border color
+      local bcol = C_TXT
+      if frag.gap == nil then
+        bcol = C_DIM  -- decoy
+      end
+      if G.s1_mode == "frags" and G.s1_cursor == di then
+        bcol = C_CUR
+      end
+      rectb(bx, frag_y, bw, FRAG_H, bcol)
+
+      -- Draw mini wave inside box
+      local wave_y = frag_y + math.floor(FRAG_H / 2)
+      draw_wave(bx + 2, wave_y, bw - 4, frag.amp * 0.4, frag.freq, bcol)
+    end
+  end
+
+  ---------------------------------
+  -- Divider (y 121)
+  ---------------------------------
+  draw_divider(121)
+
+  ---------------------------------
+  -- Status bar (y 122-135)
+  ---------------------------------
+  local hint
+  if G.s1_flash_t > 0 then
+    hint = "SIGNAL RECONSTRUCTED"
+  elseif G.s1_mode == "gaps" and G.s1_held ~= nil then
+    hint = "L/R: GAP  Z: PLACE  X: CANCEL"
+  elseif G.s1_mode == "gaps" and G.s1_held == nil then
+    hint = "L/R: GAP  Z: LIFT  X: BACK"
+  else
+    hint = "L/R: SELECT  Z: PICK UP  UP: GAPS"
+  end
+  draw_hint_bar(hint, 122)
 end
 
 -------------------------------
