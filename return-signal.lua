@@ -248,6 +248,193 @@ G = {
 }
 
 -------------------------------
+-- [UTIL]
+-------------------------------
+
+function draw_wave(x, y, w, amp, freq, col)
+  for i = 0, w - 2 do
+    local y1 = y + math.floor(math.sin(i * freq) * amp + math.sin(i * freq * 2) * amp * 0.4)
+    local y2 = y + math.floor(math.sin((i + 1) * freq) * amp + math.sin((i + 1) * freq * 2) * amp * 0.4)
+    line(x + i, y1, x + i + 1, y2, col)
+  end
+end
+
+function word_wrap(text, max_chars)
+  if #text <= max_chars then return text, nil end
+  local bp = max_chars
+  while bp > 0 and string.sub(text, bp, bp) ~= " " do
+    bp = bp - 1
+  end
+  if bp == 0 then bp = max_chars end
+  local line1 = string.sub(text, 1, bp)
+  local line2 = string.sub(text, bp + 1)
+  -- trim leading space from line2
+  if string.sub(line2, 1, 1) == " " then
+    line2 = string.sub(line2, 2)
+  end
+  if #line2 == 0 then line2 = nil end
+  return line1, line2
+end
+
+function fmt_time(frames)
+  local total_s = math.floor(frames / 60)
+  local m = math.floor(total_s / 60)
+  local s = total_s % 60
+  return string.format("%02d:%02d", m, s)
+end
+
+function draw_header(text, right_text)
+  rect(0, 0, SW, 11, C_BG2)
+  print(text, 4, 2, C_HFNT)
+  if right_text then
+    local rw = #right_text * 6
+    print(right_text, SW - rw - 4, 2, C_DIM)
+  end
+end
+
+function draw_divider(y)
+  line(0, y, SW - 1, y, C_BDR)
+end
+
+function draw_hint_bar(text, y)
+  rect(0, y, SW, SH - y, C_BG2)
+  print(text, 4, y + 2, C_DIM)
+end
+
+function shuffle(t)
+  for i = #t, 2, -1 do
+    local j = math.random(1, i)
+    t[i], t[j] = t[j], t[i]
+  end
+end
+
+function is_available(idx)
+  return idx >= 1 and idx <= 3
+end
+
+function is_selectable(idx)
+  return is_available(idx) or G.decoded[idx]
+end
+
+function tx_status(idx)
+  if G.decoded[idx] then
+    return "[DECODED]", C_OK
+  elseif is_available(idx) then
+    return "[READY]", C_HFNT
+  else
+    return "[LOCKED]", C_DIM
+  end
+end
+
+function next_selectable(cur, dir)
+  local n = #TRANSMISSIONS
+  local i = cur
+  for _ = 1, n do
+    i = i + dir
+    if i < 1 then i = n end
+    if i > n then i = 1 end
+    if is_selectable(i) then return i end
+  end
+  return cur
+end
+
+function compute_gap_ranges(tx)
+  local ranges = {}
+  for gi, gpos in ipairs(tx.gap_pos) do
+    local cx = WAVE_X0 + math.floor(gpos * WAVE_W)
+    local half = math.floor(FRAG_W / 2)
+    local x0 = cx - half
+    local x1 = cx + half - 1
+    ranges[gi] = {x0 = x0, x1 = x1}
+  end
+  return ranges
+end
+
+function gap_at_x(x, gap_ranges)
+  for gi, g in ipairs(gap_ranges) do
+    if x >= g.x0 and x <= g.x1 then return gi end
+  end
+  return nil
+end
+
+function frag_box_w(n)
+  return math.min(FRAG_W, math.floor((232 - (n - 1) * FRAG_GAP) / n))
+end
+
+function slot_layout(n)
+  if n <= 3 then return 1, n
+  elseif n == 4 then return 2, 2
+  elseif n == 5 then return 2, 3
+  else return 2, 3
+  end
+end
+
+function play_sfx(id)
+  -- sfx(id)
+end
+
+function init_stage1(tx_idx)
+  math.randomseed(time())
+  local tx = TRANSMISSIONS[tx_idx]
+  local order = {}
+  for i = 1, #tx.frags do order[i] = i end
+  shuffle(order)
+  G.s1_order   = order
+  G.s1_cursor  = 1
+  G.s1_held    = nil
+  G.s1_gap_cur = 1
+  G.s1_mode    = "frags"
+  G.s1_placed  = {}
+  G.s1_shake_t = 0
+  G.s1_flash_t = 0
+end
+
+function init_stage2(tx_idx)
+  math.randomseed(time())
+  local tx = TRANSMISSIONS[tx_idx]
+  local pool = {}
+  for i, txt in ipairs(tx.seq) do
+    pool[#pool + 1] = {text = txt, idx = i, decoy = false}
+  end
+  for _, txt in ipairs(tx.seq_dec) do
+    pool[#pool + 1] = {text = txt, idx = nil, decoy = true}
+  end
+  shuffle(pool)
+  G.s2_pool    = pool
+  G.s2_slots   = {}
+  G.s2_held    = nil
+  G.s2_row     = 1
+  G.s2_col     = 1
+  G.s2_err_t   = 0
+  G.s2_err_sl  = {}
+  G.s2_phase   = "place"
+  G.s2_tw_text = ""
+  G.s2_tw_pos  = 0
+  G.s2_tw_t    = 0
+  G.s2_pause_t = 0
+end
+
+function init_vela_log(tx_idx)
+  G.vl_line  = 0
+  G.vl_timer = 0
+  G.vl_done  = false
+end
+
+function s2_available_pool()
+  local avail = {}
+  for i = 1, #G.s2_pool do
+    local placed = false
+    for _, pi in pairs(G.s2_slots) do
+      if pi == i then placed = true; break end
+    end
+    if not placed then
+      avail[#avail + 1] = i
+    end
+  end
+  return avail
+end
+
+-------------------------------
 -- [DRAW] Title (stub)
 -------------------------------
 
