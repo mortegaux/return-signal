@@ -435,11 +435,41 @@ function s2_available_pool()
 end
 
 -------------------------------
--- [DRAW] Title (stub)
+-- [DRAW] Title
 -------------------------------
 
 function draw_title()
   cls(C_BG)
+
+  -- Diamond shape in green at center-top
+  local dx = math.floor(SW / 2)
+  local dy = 30
+  pix(dx, dy - 2, C_OK)
+  pix(dx - 1, dy - 1, C_OK)
+  pix(dx + 1, dy - 1, C_OK)
+  pix(dx - 2, dy, C_OK)
+  pix(dx, dy, C_OK)
+  pix(dx + 2, dy, C_OK)
+  pix(dx - 1, dy + 1, C_OK)
+  pix(dx + 1, dy + 1, C_OK)
+  pix(dx, dy + 2, C_OK)
+
+  -- "RETURN SIGNAL" centered in white
+  local title = "RETURN SIGNAL"
+  local tw = #title * 6
+  print(title, math.floor((SW - tw) / 2), 42, C_WHITE)
+
+  -- "a signal from earth" centered below
+  local sub = "a signal from earth"
+  local subw = #sub * 6
+  print(sub, math.floor((SW - subw) / 2), 56, C_TXT)
+
+  -- "[Z to begin]" blinking on/off every BLINK_RATE frames
+  if math.floor(G.t / BLINK_RATE) % 2 == 0 then
+    local prompt = "[Z to begin]"
+    local pw = #prompt * 6
+    print(prompt, math.floor((SW - pw) / 2), 80, C_DIM)
+  end
 end
 
 -------------------------------
@@ -475,10 +505,60 @@ function draw_vela_log()
 end
 
 -------------------------------
+-- [UPDATE] Title
+-------------------------------
+
+function update_title()
+  if btnp(4) then
+    G.state   = "hub"
+    G.hub_cur = 1
+  end
+end
+
+-------------------------------
+-- [UPDATE] Hub (stub)
+-------------------------------
+
+function update_hub()
+end
+
+-------------------------------
+-- [UPDATE] Stage 1 (stub)
+-------------------------------
+
+function update_stage1()
+end
+
+-------------------------------
+-- [UPDATE] Stage 2 (stub)
+-------------------------------
+
+function update_stage2()
+end
+
+-------------------------------
+-- [UPDATE] VELA Log (stub)
+-------------------------------
+
+function update_vela_log()
+end
+
+-------------------------------
 -- [UPDATE] Dispatcher
 -------------------------------
 
 function update()
+  if G.state == "title" then
+    update_title()
+  elseif G.state == "hub" then
+    update_hub()
+  elseif G.state == "stage1" then
+    update_stage1()
+  elseif G.state == "stage2" then
+    update_stage2()
+  elseif G.state == "vela_log" then
+    update_vela_log()
+  end
 end
 
 -------------------------------
