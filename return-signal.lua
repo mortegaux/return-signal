@@ -419,7 +419,7 @@ function tile_at(wx, wy)
 end
 
 function is_solid(tid)
-  return tid == T_FLOOR or tid == T_WALL or tid == T_CEIL
+  return tid == T_FLOOR or tid == T_WALL or tid == T_CEIL or tid == T_GRATE
 end
 
 -------------------------------
