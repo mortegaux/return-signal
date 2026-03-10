@@ -1216,7 +1216,7 @@ function update_stage2()
 
     -- Z pressed
     if btnp(4) then
-      -- Check if all slots are filled and nothing held → submit
+      -- Check if all slots filled and nothing held: submit
       local all_filled = true
       for s = 1, ns do
         if not G.s2_slots[s] then all_filled = false; break end
@@ -1326,3 +1326,7 @@ function TIC()
     draw_vela_log()
   end
 end
+
+-- <PALETTE>
+-- 000:1a1c2c5d275db13e53ef7d57ffcd75a7f07038b76425717929366f3b5dc941a6f673eff7f4f4f494b0c2566c86333c57
+-- </PALETTE>
