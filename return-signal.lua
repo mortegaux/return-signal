@@ -59,6 +59,18 @@ T_LIGHT_ALT   = 16
 T_CRYO_L_ALT  = 17
 T_CRYO_R_ALT  = 18
 
+-- Robot sprite indices (top half of each frame)
+-- Bottom half is always index + 1
+SPR_IDLE_A   = 32
+SPR_IDLE_B   = 34
+SPR_WALK_A   = 36
+SPR_WALK_B   = 38
+SPR_INTERACT = 40
+
+IDLE_TOGGLE  = 30   -- frames between idle A/B
+WALK_TOGGLE  = 8    -- frames between walk A/B
+INTERACT_DUR = 12   -- frames to hold interact pose
+
 -- Waveform area
 WAVE_X0 = 10
 WAVE_X1 = 230
@@ -255,6 +267,7 @@ G = {
   robot_dir = 1,
   robot_frm = 1,
   walk_t    = 0,
+  interact_t = 0,    -- interact frame timer (counts down)
   cur_room  = "bridge",
   near_obj  = nil,
 
@@ -710,26 +723,21 @@ function draw_ship()
   end
 
   -- Draw robot
-  local rx = G.robot_x - G.cam_x
+  local rx = G.robot_x - math.floor(G.cam_x)
   local ry = G.robot_y
-  -- Body
-  rect(rx, ry, ROBOT_W, ROBOT_H, C_TXT)
-  -- Head
-  rect(rx + 1, ry, 6, 5, C_WHITE)
-  -- Visor
-  local vx = rx + (G.robot_dir == 1 and 4 or 1)
-  rect(vx, ry + 1, 3, 2, C_HFNT)
-  -- Legs (walk animation)
-  if G.walk_t > 0 then
-    local frame = math.floor(G.walk_t / 6) % 2
-    if frame == 0 then
-      rect(rx + 1, ry + ROBOT_H - 3, 2, 3, C_BG2)
-      rect(rx + 5, ry + ROBOT_H - 1, 2, 1, C_BG2)
-    else
-      rect(rx + 5, ry + ROBOT_H - 3, 2, 3, C_BG2)
-      rect(rx + 1, ry + ROBOT_H - 1, 2, 1, C_BG2)
-    end
+  local flip = G.robot_dir == -1 and 1 or 0  -- spr() flip: 0=none, 1=horizontal
+
+  local sprite_top
+  if G.interact_t > 0 then
+    sprite_top = SPR_INTERACT
+  elseif G.walk_t > 0 then
+    sprite_top = (math.floor(G.walk_t / WALK_TOGGLE) % 2 == 0) and SPR_WALK_A or SPR_WALK_B
+  else
+    sprite_top = (math.floor(G.t / IDLE_TOGGLE) % 2 == 0) and SPR_IDLE_A or SPR_IDLE_B
   end
+
+  spr(sprite_top,     rx, ry,     0, 1, flip, 0, 1, 1)
+  spr(sprite_top + 1, rx, ry + 8, 0, 1, flip, 0, 1, 1)
 
   -- Room label
   local room_labels = {
@@ -1308,6 +1316,8 @@ function update_ship()
     end
   end
 
+  if G.interact_t > 0 then G.interact_t = G.interact_t - 1 end
+
   local moved = false
 
   -- Movement
@@ -1383,6 +1393,7 @@ function update_ship()
 
   -- Z: interact
   if btnp(4) and G.near_obj then
+    G.interact_t = INTERACT_DUR
     G.term_type = G.near_obj.type
     G.near_obj_label = G.near_obj.label
     if G.term_type == "signal_log" then
@@ -1781,6 +1792,16 @@ init_map()
 -- 016:1111111111133111133333111333331111133111111111111111111111111111
 -- 017:777777777777777777b77777777777777777b77777777777777777b777777777
 -- 018:777777777777777777777b7777777777777b7777777777777b77777777777777
+-- 032:00dddd0000dbbd0000dddd000dddddd00deddde00deddde000dddd0000d88d00
+-- 033:0080080000800800008008000080080008800880000000000000000000000000
+-- 034:00dddd0000daad0000dddd000dddddd00deddde00deddde000dddd0000d88d00
+-- 035:0080080000800800008008000080080008800880000000000000000000000000
+-- 036:00dddd0000dbbd0000dddd000dddddd00deddde00deddde000dddd0000d88d00
+-- 037:0080080000800800080000800800008080000008000000000000000000000000
+-- 038:00dddd0000dbbd0000dddd000dddddd00deddde00deddde000dddd0000d88d00
+-- 039:0080080000800800008008000800008000000880000000000000000000000000
+-- 040:00dddd0000dbbd0000dddd000dddddd00deddddd0deddde000dddd0000d88d00
+-- 041:0080080000800800008008000080080008800880000000000000000000000000
 -- </TILES>
 -- <PALETTE>
 -- 000:1a1c2c5d275db13e53ef7d57ffcd75a7f07038b76425717929366f3b5dc941a6f673eff7f4f4f494b0c2566c86333c57
