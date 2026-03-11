@@ -271,6 +271,10 @@ G = {
   interact_t = 0,    -- interact frame timer (counts down)
   cur_room  = "bridge",
   near_obj  = nil,
+  prompt_fade   = 0,
+  prev_near_obj = nil,
+  room_label_t  = 0,
+  prev_room     = nil,
 
   -- Terminal
   term_type = "",
@@ -286,6 +290,8 @@ G = {
   s1_order   = {},
   s1_shake_t = 0,
   s1_flash_t = 0,
+  s1_pulse_t  = 0,
+  s1_pulse_gi = 0,
 
   -- Puzzle (Stage 2)
   s2_slots   = {},
@@ -815,13 +821,6 @@ function draw_ship()
   spr(sprite_top,     rx, ry,     0, 1, flip, 0, 1, 1)
   spr(sprite_top + 1, rx, ry + 8, 0, 1, flip, 0, 1, 1)
 
-  -- Room label
-  local room_labels = {
-    bridge="BRIDGE", comms="COMMS", cryo="CRYO BAY", engineering="ENGINEERING"
-  }
-  local label = room_labels[G.cur_room] or ""
-  print(label, 4, 2, C_DIM)
-
   -- Door arrows
   if room.exits.left then
     print("<", 2, math.floor(SH/2), C_WARM)
@@ -830,14 +829,36 @@ function draw_ship()
     print(">", SW - 8, math.floor(SH/2), C_WARM)
   end
 
-  -- Interaction prompt
-  if G.near_obj then
+  -- Interaction prompt (floating above robot)
+  if G.near_obj and G.prompt_fade > 0 then
     local prompt = "Z: " .. G.near_obj.label
     local pw = #prompt * 6
-    local px = math.floor((SW - pw) / 2)
-    rect(px - 2, SH - 14, pw + 4, 12, C_BG)
-    rectb(px - 2, SH - 14, pw + 4, 12, C_BDR)
-    print(prompt, px, SH - 11, C_HFNT)
+    local px = rx + math.floor(ROBOT_W / 2) - math.floor(pw / 2)
+    px = clamp(px, 2, SW - pw - 2)
+    local bob = math.floor(math.sin(G.t * 0.1) * 1)
+    local py = clamp(ry - 10 + bob, 2, SH - 10)
+    if G.prompt_fade >= 2 then
+      rect(px - 2, py - 1, pw + 4, 9, C_BG)
+      rectb(px - 2, py - 1, pw + 4, 9, C_BDR)
+      print(prompt, px, py, C_HFNT)
+    end
+  end
+
+  -- Room label (fades on entry)
+  if G.room_label_t > 0 then
+    local room_labels = {
+      bridge="BRIDGE", comms="COMMS", cryo="CRYO BAY", engineering="ENGINEERING"
+    }
+    local label = room_labels[G.cur_room] or ""
+    local col = G.room_label_t > 30 and C_DIM or C_BG2
+    print(label, 4, 2, col)
+  end
+
+  -- Decoded count HUD
+  local dc = decoded_count()
+  if dc > 0 then
+    local hud = dc .. "/8"
+    print(hud, SW - #hud * 6 - 4, 2, C_DIM)
   end
 end
 
@@ -1074,6 +1095,15 @@ function draw_puzzle_s1()
     end
   end
 
+  -- Green pulse on recently placed gap
+  if G.s1_pulse_t > 0 then
+    local gr = gap_ranges[G.s1_pulse_gi]
+    if gr then
+      local expand = G.s1_pulse_t
+      rectb(gr.x0 - expand, WCY - 12 - expand, gr.x1 - gr.x0 + expand * 2, 24 + expand * 2, C_OK)
+    end
+  end
+
   draw_divider(80)
 
   -- Fragment row
@@ -1110,6 +1140,12 @@ function draw_puzzle_s1()
   elseif G.s1_mode == "gaps" then hint = "L/R: GAP  Z: LIFT  X: BACK"
   else hint = "L/R: SELECT  Z: PICK UP  UP: GAPS" end
   draw_hint_bar(hint, 122)
+
+  -- Red border flash on shake
+  if G.s1_shake_t > 0 then
+    rectb(0, 0, SW, SH, C_ERR)
+    rectb(1, 1, SW - 2, SH - 2, C_ERR)
+  end
 end
 
 -------------------------------
@@ -1174,6 +1210,16 @@ function draw_puzzle_s2()
         local l1, l2 = word_wrap(pe.text, max_chars)
         print(l1, box_x + 2, box_y + 5, C_TXT)
         if l2 then print(l2, box_x + 2, box_y + 14, C_TXT) end
+      end
+      -- Static noise on wrong slots
+      if G.s2_err_t > 0 and G.s2_err_sl[si] then
+        for ny = box_y + 1, box_y + SLOT_H - 2 do
+          for nx = box_x + 1, box_x + sw2 - 2 do
+            if (nx + ny + G.t) % 4 == 0 then
+              pix(nx, ny, C_ERR)
+            end
+          end
+        end
       end
       slot_i = slot_i + 1
     end
@@ -1481,6 +1527,25 @@ function update_ship()
     end
   end
 
+  -- Prompt fade
+  if G.near_obj and not G.prev_near_obj then
+    G.prompt_fade = 0
+    play_sfx(SFX_PROMPT)
+  end
+  if G.near_obj then
+    G.prompt_fade = math.min(G.prompt_fade + 1, 4)
+  else
+    G.prompt_fade = 0
+  end
+  G.prev_near_obj = G.near_obj
+
+  -- Room label fade
+  if G.cur_room ~= G.prev_room then
+    G.room_label_t = 60
+    G.prev_room = G.cur_room
+  end
+  if G.room_label_t > 0 then G.room_label_t = G.room_label_t - 1 end
+
   -- Z: interact
   if btnp(4) and G.near_obj then
     G.interact_t = INTERACT_DUR
@@ -1522,6 +1587,7 @@ function update_puzzle_s1()
   local num_gaps = #tx.gap_pos
 
   if G.s1_shake_t > 0 then G.s1_shake_t = G.s1_shake_t - 1 end
+  if G.s1_pulse_t > 0 then G.s1_pulse_t = G.s1_pulse_t - 1 end
 
   if G.s1_flash_t > 0 then
     G.s1_flash_t = G.s1_flash_t - 1
@@ -1575,6 +1641,8 @@ function update_puzzle_s1()
           if frag.gap == gi then
             G.s1_placed[gi] = G.s1_held
             G.s1_held = nil
+            G.s1_pulse_t = 8
+            G.s1_pulse_gi = gi
             play_sfx(SFX_CORRECT)
             local all = true
             for g = 1, num_gaps do
