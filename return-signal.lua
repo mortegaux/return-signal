@@ -695,94 +695,13 @@ end
 -- [DRAW_SHIP]
 -------------------------------
 
--- Tile color lookup
-TILE_COLORS = {
-  [T_FLOOR]  = C_BDR,
-  [T_WALL]   = C_BG2,
-  [T_CEIL]   = C_BG2,
-  [T_PANEL]  = 1,      -- dark purple
-  [T_DOOR]   = C_WARM,
-  [T_WINDOW] = 0,      -- black (space)
-  [T_SCREEN] = C_HFNT,
-  [T_PIPE]   = 1,
-  [T_GRATE]  = C_BDR,
-  [T_CRYO_L] = 3,      -- dark green
-  [T_CRYO_R] = 3,
-  [T_LIGHT]  = C_SEL,
-}
-
 function draw_ship()
   cls(C_BG)
   local room = ROOMS[G.cur_room]
 
-  -- Draw tiles
-  for ty = 0, room.map_h - 1 do
-    for tx = 0, room.map_w - 1 do
-      local tile = mget(room.map_x + tx, room.map_y + ty)
-      if tile ~= T_EMPTY then
-        local sx = tx * TILE - G.cam_x
-        local sy = ty * TILE
-        local col = TILE_COLORS[tile] or C_DIM
-
-        if tile == T_WINDOW then
-          -- Window: black with border, occasional star
-          rect(sx, sy, TILE, TILE, C_BG)
-          if (tx + ty * 7) % 5 == 0 then
-            pix(sx + 3, sy + 3, C_WHITE)
-          end
-          if (tx * 3 + ty) % 7 == 0 then
-            pix(sx + 6, sy + 5, C_DIM)
-          end
-        elseif tile == T_LIGHT then
-          -- Ceiling light: blinking
-          rect(sx, sy, TILE, TILE, 1)
-          local blink = (math.floor(G.t / 40) + tx) % 3
-          if blink > 0 then
-            rect(sx + 2, sy + 4, 4, 3, C_SEL)
-          else
-            rect(sx + 2, sy + 4, 4, 3, C_WARM)
-          end
-        elseif tile == T_SCREEN then
-          -- Screen: dark bg with scan line
-          rect(sx, sy, TILE, TILE, C_BG2)
-          rectb(sx, sy, TILE, TILE, C_HFNT)
-          local scan_y = (G.t + ty * 4) % TILE
-          pix(sx + 2, sy + scan_y, C_HFNT)
-          pix(sx + 5, sy + scan_y, C_HFNT)
-        elseif tile == T_CRYO_L or tile == T_CRYO_R then
-          -- Cryo pod: dark with frost effect
-          rect(sx, sy, TILE, TILE, 3)
-          rectb(sx, sy, TILE, TILE, C_HFNT)
-          -- Frost shimmer
-          if math.floor(G.t / 60 + tx) % 4 == 0 then
-            pix(sx + 3, sy + 2, C_WHITE)
-          end
-          -- Pod status light
-          if ty == room.map_h - 3 then
-            local dc = decoded_count()
-            local light_col = C_OK
-            if dc >= 8 then light_col = C_WARM end  -- warming
-            pix(sx + 4, sy + 6, light_col)
-          end
-        elseif tile == T_DOOR then
-          rect(sx, sy, TILE, TILE, C_WARM)
-          -- Door frame lines
-          if ty == room.map_h - 5 then
-            line(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_BDR)
-          end
-        elseif tile == T_GRATE then
-          rect(sx, sy, TILE, TILE, C_BDR)
-          -- Grate pattern
-          for gx = 1, 6, 2 do
-            pix(sx + gx, sy + 2, C_BG)
-            pix(sx + gx, sy + 5, C_BG)
-          end
-        else
-          rect(sx, sy, TILE, TILE, col)
-        end
-      end
-    end
-  end
+  -- Draw tiles using map() — colorkey 0 makes T_EMPTY transparent
+  map(room.map_x, room.map_y, room.map_w, room.map_h,
+      -math.floor(G.cam_x), 0, 0)
 
   -- Draw interactable markers
   for _, obj in ipairs(room.objects) do
@@ -1361,6 +1280,34 @@ end
 
 function update_ship()
   local room = ROOMS[G.cur_room]
+
+  -- Ambient tile animations (every 0.5 sec)
+  if G.t % 30 == 0 then
+    for ty = 0, room.map_h - 1 do
+      for tx = 0, room.map_w - 1 do
+        local tid = mget(room.map_x + tx, room.map_y + ty)
+        if tid == T_SCREEN then
+          mset(room.map_x + tx, room.map_y + ty, T_SCREEN_ALT)
+        elseif tid == T_SCREEN_ALT then
+          mset(room.map_x + tx, room.map_y + ty, T_SCREEN)
+        elseif tid == T_LIGHT and math.random() < 0.3 then
+          mset(room.map_x + tx, room.map_y + ty, T_LIGHT_ALT)
+        elseif tid == T_LIGHT_ALT then
+          mset(room.map_x + tx, room.map_y + ty, T_LIGHT)
+        elseif tid == T_CRYO_L and decoded_count() < 7 then
+          mset(room.map_x + tx, room.map_y + ty, T_CRYO_L_ALT)
+        elseif tid == T_CRYO_L_ALT then
+          mset(room.map_x + tx, room.map_y + ty, T_CRYO_L)
+        elseif tid == T_CRYO_R and decoded_count() < 7 then
+          mset(room.map_x + tx, room.map_y + ty, T_CRYO_R_ALT)
+        elseif tid == T_CRYO_R_ALT then
+          mset(room.map_x + tx, room.map_y + ty, T_CRYO_R)
+        -- Warm cryo tiles (Phase 5) are NOT animated — they stay warm
+        end
+      end
+    end
+  end
+
   local moved = false
 
   -- Movement
