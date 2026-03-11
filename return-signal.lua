@@ -271,6 +271,7 @@ G = {
   interact_t = 0,    -- interact frame timer (counts down)
   cur_room  = "bridge",
   near_obj  = nil,
+  near_obj_label = "",
   prompt_fade   = 0,
   prev_near_obj = nil,
   room_label_t  = 0,
@@ -893,7 +894,7 @@ function draw_ship()
 
   -- Draw interactable markers
   for _, obj in ipairs(room.objects) do
-    local ox = obj.x - G.cam_x
+    local ox = obj.x - math.floor(G.cam_x)
     rectb(ox, obj.y, obj.w, obj.h, C_HFNT)
   end
 
