@@ -456,6 +456,25 @@ function init_map()
   end
 end
 
+function rebuild_room(name)
+  build_room(name)
+  local room = ROOMS[name]
+  local dc = decoded_count()
+  local mx, my = room.map_x, room.map_y
+  local h = room.map_h
+
+  -- Cryo pod warming (7+ decoded): swap frost tiles to warm clear glass
+  if name == "cryo" and dc >= 7 then
+    local pod_xs = {7, 12, 17, 22}
+    for _, px in ipairs(pod_xs) do
+      for ty = h - 5, h - 3 do
+        mset(mx + px, my + ty, T_CRYO_L_WARM)
+        mset(mx + px + 1, my + ty, T_CRYO_R_WARM)
+      end
+    end
+  end
+end
+
 function tile_at(wx, wy)
   local room = ROOMS[G.cur_room]
   local tx = room.map_x + math.floor(wx / TILE)
@@ -831,6 +850,46 @@ function draw_ship()
   -- Draw tiles using map() — colorkey 0 makes T_EMPTY transparent
   map(room.map_x, room.map_y, room.map_w, room.map_h,
       -math.floor(G.cam_x), 0, 0)
+
+  -- Environmental progression overlays
+  local dc = decoded_count()
+
+  -- Comms signal indicator (1+ decoded)
+  if G.cur_room == "comms" and dc >= 1 then
+    if math.floor(G.t / 20) % 2 == 0 then
+      pix(112 - math.floor(G.cam_x), 42, C_OK)
+    end
+  end
+
+  -- Nav console text (3+ decoded)
+  if G.cur_room == "bridge" and dc >= 3 then
+    print("SIG", 48 - math.floor(G.cam_x), 100, C_OK)
+  end
+
+  -- Cryo pod flicker (3+ decoded)
+  if G.cur_room == "cryo" and dc >= 3 then
+    if G.t % 180 < 3 then
+      rectb(56 - math.floor(G.cam_x), 88, 12, 24, C_ERR)
+    end
+  end
+
+  -- Viewport Earth glow (5+ decoded)
+  if G.cur_room == "bridge" and dc >= 5 then
+    local wx = 160 - math.floor(G.cam_x)
+    local pulse = math.floor(math.sin(G.t * 0.03) * 2)
+    circ(wx, 48, 3 + pulse, C_WARM)
+  end
+
+  -- Static environmental details
+  if G.cur_room == "comms" then
+    spr(48, 104 - math.floor(G.cam_x), 92, 0)
+  end
+  if G.cur_room == "bridge" then
+    spr(49, 64 - math.floor(G.cam_x), 100, 0)
+  end
+  if G.cur_room == "engineering" then
+    spr(50, 72 - math.floor(G.cam_x), 112, 0)
+  end
 
   -- Draw interactable markers
   for _, obj in ipairs(room.objects) do
@@ -1609,6 +1668,14 @@ function update_ship()
   target = clamp(target, 0, max_cam)
   G.cam_x = math.floor(G.cam_x + (target - G.cam_x) * 0.15)
 
+  -- Contextual idle
+  if G.walk_t == 0 and G.t % 300 == 0 then
+    local dc = decoded_count()
+    if dc >= 5 and G.cur_room == "cryo" then
+      G.robot_dir = -G.robot_dir
+    end
+  end
+
   -- Interaction proximity
   G.near_obj = nil
   for _, obj in ipairs(room.objects) do
@@ -1978,6 +2045,10 @@ function update_vela_log()
         G.state = "terminal"
       else
         G.decoded[G.tx_idx] = true
+        -- Rebuild rooms to reflect progression
+        for _, rname in ipairs(ROOM_ORDER) do
+          rebuild_room(rname)
+        end
         if G.tx_idx == 8 then
           G.state = "ending"
           G.end_stage = 1
@@ -2086,6 +2157,9 @@ function TIC()
     local note = 12  -- base note
     if G.cur_room == "engineering" then note = 8 end
     if G.cur_room == "cryo" then note = 6 end
+    local dc = decoded_count()
+    if dc >= 6 then note = note + 2 end
+    if dc >= 8 then note = note + 4 end
     sfx(SFX_AMBIENT, note, 240, 0)
   end
 
@@ -2193,6 +2267,10 @@ init_map()
 -- 039:0080080000800800008008000800008000000880000000000000000000000000
 -- 040:00dddd0000dbbd0000dddd000dddddd00deddddd0deddde000dddd0000d88d00
 -- 041:0080080000800800008008000080080008800880000000000000000000000000
+-- 048:0000000000033000003aa300003aa300003aa300003aa3000033330000000000
+-- 049:000000000f00000000f00000000f00000000f00000000f00000000f000000000
+-- 050:00000000000000000f0f0000000000000000f0f0000000000000000000000000
+-- 051:0000000000060000006660000066000000000000000000000000000000000000
 -- </TILES>
 -- <PALETTE>
 -- 000:1a1c2c5d275db13e53ef7d57ffcd75a7f07038b76425717929366f3b5dc941a6f673eff7f4f4f494b0c2566c86333c57
