@@ -330,6 +330,19 @@ G = {
   -- Terminal transition
   term_trans     = 0,
   term_trans_max = 12,
+
+  -- Hints
+  hints_shown = {},
+  hint_t      = 0,
+  hint_text   = "",
+
+  -- Puzzle exit confirmation
+  puz_confirm = false,
+
+  -- Replay decoded transmissions
+  replay       = false,
+  replay_msg   = "",
+  replay_phase = "msg",
 }
 
 -------------------------------
@@ -629,6 +642,27 @@ function decoded_count()
   return c
 end
 
+function show_hint(id, text, duration)
+  if G.hints_shown[id] then return end
+  G.hints_shown[id] = true
+  G.hint_text = text
+  G.hint_t = duration
+end
+
+function update_hint()
+  if G.hint_t > 0 then G.hint_t = G.hint_t - 1 end
+end
+
+function draw_hint_overlay()
+  if G.hint_t <= 0 then return end
+  if G.hint_t < 20 and G.hint_t % 4 < 2 then return end  -- blink out
+  local tw = #G.hint_text * 6
+  local tx = math.floor((SW - tw) / 2)
+  rect(tx - 4, 14, tw + 8, 12, C_BG2)
+  rectb(tx - 4, 14, tw + 8, 12, C_BDR)
+  print(G.hint_text, tx, 17, C_TXT)
+end
+
 -- SFX slot constants
 SFX_AMBIENT    = 0
 SFX_FOOTSTEP   = 1
@@ -838,9 +872,13 @@ function draw_ship()
     local bob = math.floor(math.sin(G.t * 0.1) * 1)
     local py = clamp(ry - 10 + bob, 2, SH - 10)
     if G.prompt_fade >= 2 then
+      local prompt_col = C_HFNT
+      if G.near_obj.type == "signal_log" and G.hints_shown["first_comms"] and not G.hints_shown["first_comms_done"] then
+        prompt_col = (math.floor(G.t / 10) % 2 == 0) and C_WHITE or C_HFNT
+      end
       rect(px - 2, py - 1, pw + 4, 9, C_BG)
       rectb(px - 2, py - 1, pw + 4, 9, C_BDR)
-      print(prompt, px, py, C_HFNT)
+      print(prompt, px, py, prompt_col)
     end
   end
 
@@ -860,6 +898,8 @@ function draw_ship()
     local hud = dc .. "/8"
     print(hud, SW - #hud * 6 - 4, 2, C_DIM)
   end
+
+  draw_hint_overlay()
 end
 
 -------------------------------
@@ -905,7 +945,7 @@ function draw_terminal_signal_log()
   if is_available(G.term_cur) and not G.decoded[G.term_cur] then
     hint = "Z: DECODE   X: EXIT"
   elseif G.decoded[G.term_cur] then
-    hint = "[DECODED]   X: EXIT"
+    hint = "Z: READ LOG   X: EXIT"
   else
     hint = "X: EXIT"
   end
@@ -1041,6 +1081,8 @@ function draw_terminal()
     }
     draw_terminal_info("VELA // POWER GRID", lines)
   end
+
+  draw_hint_overlay()
 end
 
 -------------------------------
@@ -1069,6 +1111,23 @@ function draw_puzzle_s1()
       local y1 = WCY + math.floor(math.sin(i*tx.target_freq)*tx.target_amp + math.sin(i*tx.target_freq*2)*tx.target_amp*0.4)
       local y2 = WCY + math.floor(math.sin((i+1)*tx.target_freq)*tx.target_amp + math.sin((i+1)*tx.target_freq*2)*tx.target_amp*0.4)
       line(px, y1, px+1, y2, C_WHITE)
+    end
+  end
+
+  -- Visual noise — increases with TX number (deterministic, no math.random)
+  local noise_level = G.tx_idx - 1
+  if noise_level > 0 then
+    for i = 1, noise_level * 3 do
+      local nx = WAVE_X0 + (i * 37 + G.t * 3) % WAVE_W
+      local ny = WCY + ((i * 53 + G.t) % 31) - 15
+      pix(nx, ny, C_DIM)
+    end
+    if noise_level >= 4 then
+      for i = 1, noise_level - 3 do
+        local bx = WAVE_X0 + (i * 73 + G.t * 2) % (WAVE_W - 10)
+        local by = WCY + ((i * 41) % 21) - 10
+        line(bx, by, bx + (i * 3 + G.t) % 8 + 4, by, C_BDR)
+      end
     end
   end
 
@@ -1268,6 +1327,18 @@ function draw_puzzle()
   else
     draw_puzzle_s2()
   end
+
+  -- Puzzle exit confirmation overlay
+  if G.puz_confirm then
+    rect(40, 50, 160, 36, C_BG)
+    rectb(40, 50, 160, 36, C_ERR)
+    local t1 = "ABORT DECODE?"
+    print(t1, math.floor((SW - #t1 * 6) / 2), 56, C_WHITE)
+    local t2 = "Z:YES  X:NO"
+    print(t2, math.floor((SW - #t2 * 6) / 2), 70, C_DIM)
+  end
+
+  draw_hint_overlay()
 end
 
 -------------------------------
@@ -1279,6 +1350,27 @@ function draw_vela_log()
   local vela = tx.vela
 
   cls(C_BG)
+
+  if G.replay and G.replay_phase == "msg" then
+    rect(0, 0, SW, 10, C_BG2)
+    print("VELA // DECODED MESSAGE // " .. tx.id, 4, 2, C_HFNT)
+    draw_divider(10)
+    local lines_out = {}
+    local remaining = G.replay_msg
+    while remaining and #remaining > 0 do
+      local l, r = word_wrap(remaining, 36)
+      lines_out[#lines_out + 1] = l
+      remaining = r
+    end
+    for i, ln in ipairs(lines_out) do
+      print(ln, 8, 14 + (i - 1) * 10, C_TXT)
+    end
+    draw_divider(119)
+    rect(0, 120, SW, 16, C_BG2)
+    print("Z: VIEW VELA LOG", SW - 17 * 6 - 4, 126, C_DIM)
+    return
+  end
+
   rect(0, 0, SW, 10, C_BG2)
   print("VELA // INTERNAL LOG // " .. tx.id, 4, 2, C_HFNT)
   draw_divider(10)
@@ -1407,6 +1499,7 @@ function update_boot()
       G.robot_x = room.spawn_x
       G.robot_y = 80
       G.cam_x = 0
+      show_hint("first_ship", "signal detected on comms array. routing to terminal.", 120)
     end
   end
 end
@@ -1527,6 +1620,11 @@ function update_ship()
     end
   end
 
+  -- First comms approach hint
+  if G.near_obj and G.near_obj.type == "signal_log" and not G.hints_shown["first_comms"] then
+    G.hints_shown["first_comms"] = true
+  end
+
   -- Prompt fade
   if G.near_obj and not G.prev_near_obj then
     G.prompt_fade = 0
@@ -1548,6 +1646,9 @@ function update_ship()
 
   -- Z: interact
   if btnp(4) and G.near_obj then
+    if G.near_obj.type == "signal_log" then
+      G.hints_shown["first_comms_done"] = true
+    end
     G.interact_t = INTERACT_DUR
     play_sfx(SFX_TERM_ENTER)
     G.term_type = G.near_obj.type
@@ -1570,12 +1671,22 @@ function update_terminal()
     -- Navigate
     if btnp(0) then G.term_cur = next_selectable(G.term_cur, -1) end
     if btnp(1) then G.term_cur = next_selectable(G.term_cur, 1) end
-    -- Z: open transmission
+    -- Z: open transmission or replay decoded
     if btnp(4) then
       if is_available(G.term_cur) and not G.decoded[G.term_cur] then
         G.tx_idx = G.term_cur
         init_stage1(G.term_cur)
         G.state = "puzzle"
+      elseif G.decoded[G.term_cur] then
+        G.tx_idx = G.term_cur
+        local tx = TRANSMISSIONS[G.term_cur]
+        local parts = {}
+        for _, s in ipairs(tx.seq) do parts[#parts + 1] = s end
+        G.replay_msg = table.concat(parts, " // ")
+        G.replay = true
+        G.replay_phase = "msg"
+        G.state = "vela_log"
+        init_vela_log()
       end
     end
   end
@@ -1585,6 +1696,18 @@ function update_puzzle_s1()
   local tx = TRANSMISSIONS[G.tx_idx]
   local n = #tx.frags
   local num_gaps = #tx.gap_pos
+
+  if G.puz_confirm then
+    if btnp(4) then  -- Z: yes, abort
+      G.puz_confirm = false
+      G.state = "terminal"
+      return
+    elseif btnp(5) then  -- X: no, resume
+      G.puz_confirm = false
+      return
+    end
+    return
+  end
 
   if G.s1_shake_t > 0 then G.s1_shake_t = G.s1_shake_t - 1 end
   if G.s1_pulse_t > 0 then G.s1_pulse_t = G.s1_pulse_t - 1 end
@@ -1598,6 +1721,11 @@ function update_puzzle_s1()
   end
 
   if G.s1_mode == "frags" then
+    -- X to exit when nothing held
+    if not G.s1_held and btnp(5) then
+      G.puz_confirm = true
+      return
+    end
     if btnp(2) then
       G.s1_cursor = G.s1_cursor - 1
       if G.s1_cursor < 1 then G.s1_cursor = n end
@@ -1725,6 +1853,24 @@ function update_puzzle_s2()
   local tx = TRANSMISSIONS[G.tx_idx]
   local ns = #tx.seq
 
+  if G.puz_confirm then
+    if btnp(4) then  -- Z: yes, abort
+      G.puz_confirm = false
+      G.state = "terminal"
+      return
+    elseif btnp(5) then  -- X: no, resume
+      G.puz_confirm = false
+      return
+    end
+    return
+  end
+
+  -- X to exit when in pool row, nothing held
+  if G.s2_phase == "place" and G.s2_row == 1 and not G.s2_held and btnp(5) then
+    G.puz_confirm = true
+    return
+  end
+
   if G.s2_err_t > 0 then
     G.s2_err_t = G.s2_err_t - 1
     if G.s2_err_t == 0 then G.s2_err_sl = {} end
@@ -1801,8 +1947,10 @@ end
 
 function update_puzzle()
   if G.puz_stage == 1 then
+    show_hint("first_s1", "match fragments to gaps in the waveform", 180)
     update_puzzle_s1()
   else
+    show_hint("first_s2", "arrange fragments in sequence", 180)
     update_puzzle_s2()
   end
 end
@@ -1811,17 +1959,34 @@ function update_vela_log()
   local tx = TRANSMISSIONS[G.tx_idx]
   local vela = tx.vela
 
+  -- Replay: show decoded message before VELA log
+  if G.replay and G.replay_phase == "msg" then
+    if btnp(4) then
+      G.replay_phase = "log"
+      init_vela_log()
+    end
+    return
+  end
+
   if G.vl_done then
     if btnp(4) then
-      G.decoded[G.tx_idx] = true
-      if G.tx_idx == 8 then
-        G.state = "ending"
-        G.end_stage = 1
-        G.end_t = 0
-        G.end_char = 0
-        G.end_done = false
+      if G.replay then
+        -- Return to terminal after replaying
+        G.replay = false
+        G.replay_msg = ""
+        G.replay_phase = "msg"
+        G.state = "terminal"
       else
-        G.state = "ship"
+        G.decoded[G.tx_idx] = true
+        if G.tx_idx == 8 then
+          G.state = "ending"
+          G.end_stage = 1
+          G.end_t = 0
+          G.end_char = 0
+          G.end_done = false
+        else
+          G.state = "ship"
+        end
       end
     end
     return
@@ -1888,11 +2053,17 @@ function update_ending()
       G.state = "title"
       G.decoded = {}
       G.t = 0
+      G.replay = false
+      G.replay_msg = ""
+      G.replay_phase = "msg"
+      G.hints_shown = {}
+      G.hint_t = 0
     end
   end
 end
 
 function update()
+  update_hint()
   if G.state == "title" then update_title()
   elseif G.state == "boot" then update_boot()
   elseif G.state == "ship" then update_ship()
