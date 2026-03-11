@@ -70,6 +70,7 @@ SPR_INTERACT = 40
 IDLE_TOGGLE  = 30   -- frames between idle A/B
 WALK_TOGGLE  = 8    -- frames between walk A/B
 INTERACT_DUR = 12   -- frames to hold interact pose
+FADE_HALF    = 8    -- half-duration of room fade (frames per direction)
 
 -- Waveform area
 WAVE_X0 = 10
@@ -315,6 +316,14 @@ G = {
   end_t     = 0,
   end_char  = 0,
   end_done  = false,
+
+  -- Fade (room transitions)
+  fade_t    = 0,
+  fade_dest = nil,
+
+  -- Terminal transition
+  term_trans     = 0,
+  term_trans_max = 12,
 }
 
 -------------------------------
@@ -488,6 +497,36 @@ end
 function draw_hint_bar(text, y)
   rect(0, y, SW, SH - y, C_BG2)
   print(text, 4, y + 2, C_DIM)
+end
+
+function draw_fade()
+  if G.fade_t <= 0 then return end
+  local progress
+  if G.fade_t <= FADE_HALF then
+    progress = G.fade_t / FADE_HALF
+  else
+    progress = 1 - (G.fade_t - FADE_HALF) / FADE_HALF
+  end
+  local half = math.floor(SH * 0.5 * progress)
+  if half > 0 then
+    rect(0, 0, SW, half, C_BG)
+    rect(0, SH - half, SW, half, C_BG)
+  end
+end
+
+function draw_scanline_trans()
+  if G.term_trans == 0 then return end
+  local progress
+  if G.term_trans > 0 then
+    progress = G.term_trans / G.term_trans_max
+  else
+    progress = math.abs(G.term_trans) / G.term_trans_max
+  end
+  local rows = math.floor(SH * progress)
+  for y = 0, rows - 1 do
+    local col = (y % 2 == 0) and C_BG2 or C_BG
+    line(0, y, SW - 1, y, col)
+  end
 end
 
 function draw_wave(x, y, w, amp, freq, col)
@@ -1327,6 +1366,8 @@ function update_boot()
 end
 
 function update_ship()
+  if G.fade_t > 0 then return end
+
   local room = ROOMS[G.cur_room]
 
   -- Ambient tile animations (every 0.5 sec)
@@ -1406,27 +1447,28 @@ function update_ship()
   G.robot_x = clamp(G.robot_x, TILE, rpw - TILE - ROBOT_W)
 
   -- Door transitions
-  if room.exits.left and G.robot_x <= TILE + 1 then
-    play_sfx(SFX_DOOR)
-    local dest = room.exits.left
-    G.cur_room = dest
-    local dr = ROOMS[dest]
-    G.robot_x = dr.map_w * TILE - TILE * 3
-    G.robot_y = 80
-  elseif room.exits.right and G.robot_x >= rpw - TILE - ROBOT_W - 1 then
-    play_sfx(SFX_DOOR)
-    local dest = room.exits.right
-    G.cur_room = dest
-    G.robot_x = TILE * 2
-    G.robot_y = 80
+  if G.fade_t == 0 then
+    if room.exits.left and G.robot_x <= TILE + 1 then
+      local dest = room.exits.left
+      local dr = ROOMS[dest]
+      G.fade_t = 1
+      G.fade_dest = {room=dest, x=dr.map_w * TILE - TILE * 3, y=80}
+      play_sfx(SFX_DOOR)
+    elseif room.exits.right and G.robot_x >= rpw - TILE - ROBOT_W - 1 then
+      local dest = room.exits.right
+      G.fade_t = 1
+      G.fade_dest = {room=dest, x=TILE * 2, y=80}
+      play_sfx(SFX_DOOR)
+    end
   end
 
-  -- Camera
+  -- Camera (lerp smoothing)
   room = ROOMS[G.cur_room]  -- might have changed
   local target = G.robot_x - math.floor(SW/2) + math.floor(ROBOT_W/2)
   local max_cam = room.map_w * TILE - SW
   if max_cam < 0 then max_cam = 0 end
-  G.cam_x = clamp(target, 0, max_cam)
+  target = clamp(target, 0, max_cam)
+  G.cam_x = math.floor(G.cam_x + (target - G.cam_x) * 0.15)
 
   -- Interaction proximity
   G.near_obj = nil
@@ -1445,24 +1487,17 @@ function update_ship()
     play_sfx(SFX_TERM_ENTER)
     G.term_type = G.near_obj.type
     G.near_obj_label = G.near_obj.label
-    if G.term_type == "signal_log" then
-      G.state = "terminal"
-      G.term_cur = 1
-      -- Find first selectable
-      for i = 1, #TRANSMISSIONS do
-        if is_selectable(i) then G.term_cur = i; break end
-      end
-    else
-      G.state = "terminal"
-    end
+    G.term_trans = 1  -- start opening transition
   end
 end
 
 function update_terminal()
+  if G.term_trans ~= 0 then return end
+
   -- X: exit all terminals
   if btnp(5) then
     play_sfx(SFX_TERM_EXIT)
-    G.state = "ship"
+    G.term_trans = -1
     return
   end
 
@@ -1817,6 +1852,43 @@ function TIC()
 
   update()
 
+  -- Process room fade
+  if G.fade_t > 0 then
+    G.fade_t = G.fade_t + 1
+    if G.fade_t == FADE_HALF + 1 and G.fade_dest then
+      G.cur_room = G.fade_dest.room
+      G.robot_x = G.fade_dest.x
+      G.robot_y = G.fade_dest.y
+      G.fade_dest = nil
+    end
+    if G.fade_t > FADE_HALF * 2 then
+      G.fade_t = 0
+    end
+  end
+
+  -- Process terminal transition
+  if G.term_trans > 0 then
+    G.term_trans = G.term_trans + 1
+    if G.term_trans > G.term_trans_max then
+      G.term_trans = 0
+      if G.term_type == "signal_log" then
+        G.state = "terminal"
+        G.term_cur = 1
+        for i = 1, #TRANSMISSIONS do
+          if is_selectable(i) then G.term_cur = i; break end
+        end
+      else
+        G.state = "terminal"
+      end
+    end
+  elseif G.term_trans < 0 then
+    G.term_trans = G.term_trans - 1
+    if G.term_trans < -G.term_trans_max then
+      G.term_trans = 0
+      G.state = "ship"
+    end
+  end
+
   if G.state == "title" then draw_title()
   elseif G.state == "boot" then draw_boot()
   elseif G.state == "ship" then draw_ship()
@@ -1825,6 +1897,9 @@ function TIC()
   elseif G.state == "vela_log" then draw_vela_log()
   elseif G.state == "ending" then draw_ending()
   end
+
+  draw_fade()
+  draw_scanline_trans()
 end
 
 -------------------------------
