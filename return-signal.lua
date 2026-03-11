@@ -584,8 +584,45 @@ function decoded_count()
   return c
 end
 
-function play_sfx(id)
-  -- Phase 5: wire to sfx(id)
+-- SFX slot constants
+SFX_AMBIENT    = 0
+SFX_FOOTSTEP   = 1
+SFX_DOOR       = 2
+SFX_TERM_ENTER = 3
+SFX_CORRECT    = 4
+SFX_INCORRECT  = 5
+SFX_DECODED    = 6
+SFX_TYPEWRITER = 7
+SFX_STATIC     = 8
+SFX_CRYO_HUM   = 9
+SFX_TERM_EXIT  = 10
+SFX_VELA_LINE  = 11
+SFX_BOOT_CHAR  = 12
+SFX_PROMPT     = 13
+SFX_FRAG_CLICK = 14
+
+-- Channel routing
+SFX_CHANNEL = {
+  [SFX_AMBIENT]    = 0,
+  [SFX_FOOTSTEP]   = 1,
+  [SFX_DOOR]       = 1,
+  [SFX_TERM_ENTER] = 3,
+  [SFX_CORRECT]    = 2,
+  [SFX_INCORRECT]  = 2,
+  [SFX_DECODED]    = 2,
+  [SFX_TYPEWRITER] = 3,
+  [SFX_STATIC]     = 2,
+  [SFX_CRYO_HUM]   = 0,
+  [SFX_TERM_EXIT]  = 3,
+  [SFX_VELA_LINE]  = 3,
+  [SFX_BOOT_CHAR]  = 3,
+  [SFX_PROMPT]     = 3,
+  [SFX_FRAG_CLICK] = 2,
+}
+
+function play_sfx(id, note)
+  local ch = SFX_CHANNEL[id] or 2
+  sfx(id, note or -1, -1, ch)
 end
 
 function init_stage1(tx_idx)
@@ -1268,6 +1305,9 @@ function update_boot()
     G.boot_t = G.boot_t + 1
     if G.boot_t % BOOT_CHAR_SPEED == 0 then
       G.boot_char = G.boot_char + 1
+      if G.boot_t % (BOOT_CHAR_SPEED * 3) == 0 then
+        play_sfx(SFX_BOOT_CHAR)
+      end
     end
     if G.boot_char >= total_chars then
       G.boot_done = true
@@ -1342,8 +1382,14 @@ function update_ship()
   end
 
   -- Walk anim
-  if moved then G.walk_t = G.walk_t + 1
-  else G.walk_t = 0; G.robot_frm = 1 end
+  if moved then
+    G.walk_t = G.walk_t + 1
+    if G.walk_t % 8 == 1 then
+      play_sfx(SFX_FOOTSTEP)
+    end
+  else
+    G.walk_t = 0; G.robot_frm = 1
+  end
 
   -- Gravity
   local below = tile_at(G.robot_x + 4, G.robot_y + ROBOT_H)
@@ -1361,12 +1407,14 @@ function update_ship()
 
   -- Door transitions
   if room.exits.left and G.robot_x <= TILE + 1 then
+    play_sfx(SFX_DOOR)
     local dest = room.exits.left
     G.cur_room = dest
     local dr = ROOMS[dest]
     G.robot_x = dr.map_w * TILE - TILE * 3
     G.robot_y = 80
   elseif room.exits.right and G.robot_x >= rpw - TILE - ROBOT_W - 1 then
+    play_sfx(SFX_DOOR)
     local dest = room.exits.right
     G.cur_room = dest
     G.robot_x = TILE * 2
@@ -1394,6 +1442,7 @@ function update_ship()
   -- Z: interact
   if btnp(4) and G.near_obj then
     G.interact_t = INTERACT_DUR
+    play_sfx(SFX_TERM_ENTER)
     G.term_type = G.near_obj.type
     G.near_obj_label = G.near_obj.label
     if G.term_type == "signal_log" then
@@ -1412,6 +1461,7 @@ end
 function update_terminal()
   -- X: exit all terminals
   if btnp(5) then
+    play_sfx(SFX_TERM_EXIT)
     G.state = "ship"
     return
   end
@@ -1469,7 +1519,7 @@ function update_puzzle_s1()
         G.s1_held = fi
         G.s1_mode = "gaps"
         G.s1_gap_cur = 1
-        play_sfx(6)
+        play_sfx(SFX_FRAG_CLICK)
       end
     end
 
@@ -1490,14 +1540,14 @@ function update_puzzle_s1()
           if frag.gap == gi then
             G.s1_placed[gi] = G.s1_held
             G.s1_held = nil
-            play_sfx(1)
+            play_sfx(SFX_CORRECT)
             local all = true
             for g = 1, num_gaps do
               if not G.s1_placed[g] then all = false; break end
             end
             if all then
               G.s1_flash_t = FLASH_DUR
-              play_sfx(3)
+              play_sfx(SFX_DECODED)
             else
               G.s1_mode = "frags"
             end
@@ -1505,7 +1555,7 @@ function update_puzzle_s1()
             G.s1_shake_t = SHAKE_DUR
             G.s1_held = nil
             G.s1_mode = "frags"
-            play_sfx(2)
+            play_sfx(SFX_INCORRECT)
           end
         end
       end
@@ -1527,7 +1577,7 @@ function update_puzzle_s1()
         if G.s1_placed[gi] then
           G.s1_held = G.s1_placed[gi]
           G.s1_placed[gi] = nil
-          play_sfx(6)
+          play_sfx(SFX_FRAG_CLICK)
         end
       end
       if btnp(5) or btnp(1) then
@@ -1553,7 +1603,7 @@ function check_s2_solution()
   if any_wrong then
     G.s2_err_t = ERR_FLASH
     G.s2_err_sl = wrong
-    play_sfx(2)
+    play_sfx(SFX_INCORRECT)
   else
     local parts = {}
     for si = 1, ns do
@@ -1564,7 +1614,7 @@ function check_s2_solution()
     G.s2_tw_t = 0
     G.s2_pause_t = 0
     G.s2_phase = "typewriter"
-    play_sfx(4)
+    play_sfx(SFX_DECODED)
   end
 end
 
@@ -1612,7 +1662,7 @@ function update_puzzle_s2()
       if btnp(4) then
         local pi = avail[G.s2_col]
         if G.s2_held == pi then G.s2_held = nil
-        else G.s2_held = pi; play_sfx(6) end
+        else G.s2_held = pi; play_sfx(SFX_FRAG_CLICK) end
       end
       if btnp(5) then G.s2_held = nil end
     end
@@ -1632,16 +1682,16 @@ function update_puzzle_s2()
       elseif G.s2_held and not G.s2_slots[si] then
         G.s2_slots[si] = G.s2_held
         G.s2_held = nil
-        play_sfx(1)
+        play_sfx(SFX_CORRECT)
       elseif not G.s2_held and G.s2_slots[si] then
         G.s2_held = G.s2_slots[si]
         G.s2_slots[si] = nil
-        play_sfx(6)
+        play_sfx(SFX_FRAG_CLICK)
       end
     end
     if btnp(5) then
       if G.s2_held then G.s2_held = nil
-      elseif G.s2_slots[si] then G.s2_slots[si] = nil; play_sfx(6) end
+      elseif G.s2_slots[si] then G.s2_slots[si] = nil; play_sfx(SFX_FRAG_CLICK) end
     end
   end
 end
@@ -1684,6 +1734,7 @@ function update_vela_log()
     if btnp(4) or G.vl_timer >= VL_LINE_DUR then
       G.vl_line = G.vl_line + 1
       G.vl_timer = 0
+      play_sfx(SFX_VELA_LINE)
     end
   end
   if G.vl_line >= #vela then G.vl_done = true end
@@ -1755,6 +1806,15 @@ end
 
 function TIC()
   G.t = G.t + 1
+
+  -- Ambient drone: re-trigger every 4 seconds on channel 0
+  if G.state == "ship" and G.t % 240 == 1 then
+    local note = 12  -- base note
+    if G.cur_room == "engineering" then note = 8 end
+    if G.cur_room == "cryo" then note = 6 end
+    sfx(SFX_AMBIENT, note, 240, 0)
+  end
+
   update()
 
   if G.state == "title" then draw_title()
@@ -1773,6 +1833,23 @@ end
 
 init_map()
 
+-- <SFX>
+-- 000:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 001:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 002:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 003:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 004:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 005:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 006:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 007:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 008:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 009:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 010:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 011:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 012:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 013:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 014:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- </SFX>
 -- <TILES>
 -- 001:ffffffffff0ffff0ffffffffffffffffffffffffff0ffff0ffffffffffffffff
 -- 002:fffffffff88888888888888888888888888888888888888888888888f8888888
