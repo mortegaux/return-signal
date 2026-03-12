@@ -2154,16 +2154,16 @@ end
 function TIC()
   G.t = G.t + 1
 
-  -- Ambient drone: re-trigger every 4 seconds on channel 0
-  if G.state == "ship" and G.t % 240 == 1 then
-    local note = 12  -- base note
-    if G.cur_room == "engineering" then note = 8 end
-    if G.cur_room == "cryo" then note = 6 end
-    local dc = decoded_count()
-    if dc >= 6 then note = note + 2 end
-    if dc >= 8 then note = note + 4 end
-    sfx(SFX_AMBIENT, note, 240, 0)
-  end
+  -- Ambient drone: disabled until SFX waveforms are authored in TIC-80 editor
+  -- if G.state == "ship" and G.t % 240 == 1 then
+  --   local note = 12
+  --   if G.cur_room == "engineering" then note = 8 end
+  --   if G.cur_room == "cryo" then note = 6 end
+  --   local dc = decoded_count()
+  --   if dc >= 6 then note = note + 2 end
+  --   if dc >= 8 then note = note + 4 end
+  --   sfx(SFX_AMBIENT, note, 240, 0)
+  -- end
 
   update()
 
@@ -2240,7 +2240,7 @@ init_map()
 -- 013:0300050003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000
 -- 014:0600080006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000
 -- </SFX>
--- <TILES>
+-- <SPRITES>
 -- 001:ffffffffff0ffff0ffffffffffffffffffffffffff0ffff0ffffffffffffffff
 -- 002:fffffffff88888888888888888888888888888888888888888888888f8888888
 -- 003:ffffffffffffffff8888888888888888888888888888f8888888888888888888
@@ -2259,8 +2259,6 @@ init_map()
 -- 016:1111111111133111133333111333331111133111111111111111111111111111
 -- 017:777777777777777777b77777777777777777b77777777777777777b777777777
 -- 018:777777777777777777777b7777777777777b7777777777777b77777777777777
--- </TILES>
--- <SPRITES>
 -- 032:00dddd0000dbbd0000dddd000dddddd00deddde00deddde000dddd0000d88d00
 -- 033:0080080000800800008008000080080008800880000000000000000000000000
 -- 034:00dddd0000daad0000dddd000dddddd00deddde00deddde000dddd0000d88d00
